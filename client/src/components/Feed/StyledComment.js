@@ -3,7 +3,7 @@ import { Comment } from "antd";
 import { theme } from "constants/theme";
 
 const { colors, typography } = theme;
-const { darkGray, lighterGray } = colors;
+const { darkGray, lighterGray, white } = colors;
 const { display } = typography.font.family;
 const { xsmall, medium } = typography.size;
 
@@ -43,7 +43,7 @@ const StyledComment = styled(Comment)`
               color: black;
             }
             .comment-likes {
-              background: #fff;
+              background: ${white};
               color: ${darkGray};
               font-size: ${xsmall};
               box-shadow: 0px 0.1rem 0.4rem rgba(0, 0, 0, 0.06);
@@ -69,13 +69,9 @@ const StyledComment = styled(Comment)`
                   padding-right: 0;
                   margin-right: 12px;
                 }
-                input {
-                  background-color: ${lighterGray};
-                  color: black;
-                  border-bottom: unset;
-                  border-radius: 4rem;
-                  padding: 1.4rem;
-                  width: 100%;
+
+                textarea {
+                  width: calc(100% - 50px);
                 }
               }
             }

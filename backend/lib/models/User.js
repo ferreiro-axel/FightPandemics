@@ -9,10 +9,7 @@ const UserSchema = new Schema(
     address: {
       type: String,
     },
-    location: {
-      ref: "Location",
-      type: Schema.Types.ObjectId,
-    },
+    location: Object,
     name: {
       required: true,
       type: String,
@@ -20,6 +17,7 @@ const UserSchema = new Schema(
     needs: {
       type: Array,
     },
+    type: String,
     wants: {
       type: Array,
     },
@@ -29,4 +27,7 @@ const UserSchema = new Schema(
   },
 );
 
-module.exports = model("User", UserSchema);
+const User = model("User", UserSchema);
+
+exports.model = User;
+exports.schema = UserSchema;

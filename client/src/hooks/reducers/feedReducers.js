@@ -4,7 +4,15 @@ import {
   REMOVE_ALL_OPTIONS,
   TOGGLE_STATE,
   SET_VALUE,
+  SET_POSTS,
+  FETCH_POSTS,
+  ERROR_POSTS,
 } from "../actions/feedActions";
+
+export const postsState = {
+  status: SET_POSTS,
+  posts: [],
+};
 
 export const feedReducer = (oldState, action) => {
   const { type, key, value } = action;
@@ -32,5 +40,18 @@ export const optionsReducer = (oldState, action) => {
       return {};
     default:
       return oldState;
+  }
+};
+
+export const postsReducer = (state = postsState, action) => {
+  switch (action.type) {
+    case FETCH_POSTS:
+      return { ...state, status: FETCH_POSTS, posts: [] };
+    case SET_POSTS:
+      return { ...state, status: SET_POSTS, posts: action.posts };
+    case ERROR_POSTS:
+      return { ...state, status: ERROR_POSTS, posts: [] };
+    default:
+      return state;
   }
 };

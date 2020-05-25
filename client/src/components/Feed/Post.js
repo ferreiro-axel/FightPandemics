@@ -1,25 +1,37 @@
+// Core
 import React, { useState } from "react";
 import { Modal, Card, WhiteSpace } from "antd-mobile";
+
+// Local
 import PostCard from "./PostCard";
 import PostSocial from "./PostSocial";
 import Comments from "./Comments";
 import FilterTag from "components/Tag/FilterTag";
 import AutoSize from "components/Input/AutoSize";
+import Heading from "components/Typography/Heading";
+import TextAvatar from "components/TextAvatar";
 
-// ICONS
+// Icons
 import SvgIcon from "../Icon/SvgIcon";
 import statusIndicator from "assets/icons/status-indicator.svg";
+import { ReactComponent as SubMenuIcon } from "assets/icons/submenu.svg";
 
 const Post = ({ post }) => {
   const [showComments, setShowComments] = useState(false);
   const [copied, setCopied] = useState(false);
+  const AvatarName =
+    (post.authorName &&
+      post.authorName.match(/\b\w/g).join("").toUpperCase()) ||
+    "";
+
   // mock API to test functionality
+  /* to be removed after full integration with user api */
   const [liked, setLiked] = useState(false);
   const [shared, setShared] = useState(false);
   const [comment, setComment] = useState("");
-  const [fakeLikes, setFakeLikes] = useState(post.numLikes);
-  const [fakeComments, setFakeComments] = useState(post.numComments);
-  const [fakeShares, setFakeShares] = useState(post.numShares);
+  const [fakeLikes, setFakeLikes] = useState(post.likesCount);
+  const [fakeComments, setFakeComments] = useState(post.commentsCount);
+  const [fakeShares, setFakeShares] = useState(0);
 
   const handleComment = (e) => {
     e.preventDefault();
@@ -38,42 +50,49 @@ const Post = ({ post }) => {
 
   const renderHeader = (
     <Card.Header
-      title={post.author}
-      thumb={post.photoUrl}
+      title={post.authorName}
+      thumb={
+        post.photoUrl ? post.photoUrl : <TextAvatar>{AvatarName}</TextAvatar>
+      }
       extra={
         <span>
           <SvgIcon src={statusIndicator} className="status-icon" />
-          {post.location}
+          {post.location.country}
         </span>
       }
     />
   );
 
   const renderContent = (
-    <Card.Body>
-      <h1>{post.title}</h1>
-      <p className="post-description">{post.description}</p>
+    <Card.Body className="content-wrapper">
+      <Heading level={4} className="h4">
+        {post.title}
+      </Heading>
+      <p className="post-description">{post.content}</p>
     </Card.Body>
   );
 
   const renderTags = (
     <Card.Body>
-      {post.tags.map((tag, idx) => (
-        <FilterTag key={idx} disabled={true} selected={false}>
-          {tag}
-        </FilterTag>
-      ))}
+      {post.types &&
+        post.types.map((tag, idx) => (
+          <FilterTag key={idx} disabled={true} selected={false}>
+            {tag}
+          </FilterTag>
+        ))}
     </Card.Body>
   );
 
   const renderViewMore = (
-    <Card.Body>
+    <Card.Body className="view-more-wrapper">
       <span className="view-more">View More</span>
     </Card.Body>
   );
 
   const renderComments = (
-    <Card.Body>
+    <Card.Body
+      className={`comments-wrapper ${showComments ? "show-comments" : ""}`}
+    >
       <AutoSize
         placeholder={"Write a comment..."}
         onPressEnter={handleComment}
@@ -85,14 +104,14 @@ const Post = ({ post }) => {
   );
 
   const renderSocialIcons = (
-    <Card.Body>
+    <Card.Body className="content-wrapper">
       <PostSocial
         url={post.url}
         liked={liked}
         shared={shared}
         showComments={showComments}
-        numLikes={fakeLikes}
-        numComments={fakeComments}
+        numLikes={post.likesCount}
+        numComments={post.commentsCount}
         numShares={fakeShares}
         setShowComments={() => setShowComments(!showComments)}
         onCopyLink={() => {
@@ -116,13 +135,20 @@ const Post = ({ post }) => {
       visible={copied}
       transparent
     >
-      <h1 style={{ color: "black" }}>Link Copied!</h1>
+      <Heading level={4} className="h4">
+        Link Copied!
+      </Heading>
     </Modal>
   );
 
   return (
     <PostCard>
-      {renderHeader}
+      <div className="card-header">
+        {renderHeader}
+        <div className="card-submenu">
+          <SubMenuIcon />
+        </div>
+      </div>
       <WhiteSpace size="md" />
       {renderTags}
       <WhiteSpace />
