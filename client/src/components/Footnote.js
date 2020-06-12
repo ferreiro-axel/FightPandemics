@@ -21,7 +21,6 @@ const StyledFooter = styled.footer`
   font-size: 1.1rem;
 
   @media screen and (min-width: ${mq.tablet.wide.minWidth}) {
-    background: ${colors.white};
     font-size: 1.4rem;
     height: 9rem;
   }
@@ -54,9 +53,10 @@ export default () => {
         Copyright {currentYear} FightPandemics. All rights reserved.
       </Copyright>
       <Policies>
-        <FooterLink href="/terms-conditions">Terms & Conditions</FooterLink> |{" "}
-        <FooterLink href="/privacy-policy">Privacy Policy</FooterLink> |{" "}
-        <FooterLink href="/cookies-policy">Cookies Policy</FooterLink>
+        <FooterLink to={"/faq"}>FAQ</FooterLink> |{" "}
+        <FooterLink to={"/terms-conditions"}>Terms & Conditions</FooterLink> |{" "}
+        <FooterLink to={"/privacy-policy"}>Privacy Policy</FooterLink> |{" "}
+        <FooterLink to={"/cookies-policy"}>Cookies Policy</FooterLink>
       </Policies>
     </StyledFooter>
   );

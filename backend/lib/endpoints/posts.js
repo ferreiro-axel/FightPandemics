@@ -1,9 +1,9 @@
-const httpErrors = require("http-errors");
 const mongoose = require("mongoose");
 const moment = require("moment");
 
 const {
-  addCommentSchema,
+  createCommentSchema,
+  getCommentsSchema,
   getPostsSchema,
   getPostByIdSchema,
   createPostSchema,
@@ -25,6 +25,7 @@ async function routes(app) {
   const User = mongo.model("User");
 
   // /posts
+  const POST_PAGE_SIZE = 5;
   const UNLOGGED_POST_SIZE = 120;
   const EXPIRATION_OPTIONS = ["day", "week", "month"];
 
@@ -35,13 +36,18 @@ async function routes(app) {
       schema: getPostsSchema,
     },
     async (req) => {
-      // TODO: handle optional user if authenticated
       const { userId } = req;
+      const { limit, skip, filter, objective } = req.query;
+      const queryFilters = filter ? JSON.parse(decodeURI(filter)) : {};
       let user;
       let userErr;
       if (userId) {
         [userErr, user] = await app.to(User.findById(userId));
         if (userErr) {
+          req.log.error(userErr, "Failed retrieving user");
+          throw app.httpErrors.internalServerError();
+        } else if (user === null) {
+          req.log.error(userErr, "User does not exist");
           throw app.httpErrors.forbidden();
         }
       }
@@ -51,24 +57,33 @@ async function routes(app) {
       const filters = [
         { $or: [{ expireAt: null }, { expireAt: { $gt: new Date() } }] },
       ];
-      if (user) {
+
+      // prefer location from query filters, then user if authenticated
+      let location;
+      if (queryFilters.location) {
+        location = queryFilters.location;
+      } else if (user) {
+        location = user.location;
+      }
+
+      if (location) {
         filters.push({
           $or: [
             { visibility: "worldwide" },
             {
               visibility: "country",
-              "author.location.country": user.location.country,
+              "author.location.country": location.country,
             },
             {
               visibility: "state",
-              "author.location.country": user.location.country,
-              "author.location.state": user.location.state,
+              "author.location.country": location.country,
+              "author.location.state": location.state,
             },
             {
               visibility: "city",
-              "author.location.country": user.location.country,
-              "author.location.state": user.location.state,
-              "author.location.city": user.location.city,
+              "author.location.country": location.country,
+              "author.location.state": location.state,
+              "author.location.city": location.city,
             },
           ],
         });
@@ -76,9 +91,15 @@ async function routes(app) {
       /* eslint-enable sort-keys */
 
       // Additional filters
-      const { paramFilters } = req.params;
-      if (paramFilters) {
-        // TODO: additional filters
+      const { fromWhom, type } = queryFilters; // from filterOptions.js
+      if (objective) {
+        filters.push({ objective });
+      }
+      if (fromWhom) {
+        filters.push({ "author.type": { $in: fromWhom } });
+      }
+      if (type) {
+        filters.push({ types: { $in: type } });
       }
 
       // Unlogged user limitation for post content size
@@ -90,7 +111,7 @@ async function routes(app) {
               if: { $gt: [{ $strLenCP: "$content" }, UNLOGGED_POST_SIZE] },
               then: {
                 $concat: [
-                  { $substr: ["$content", 0, UNLOGGED_POST_SIZE] },
+                  { $substrCP: ["$content", 0, UNLOGGED_POST_SIZE] },
                   "...",
                 ],
               },
@@ -99,7 +120,7 @@ async function routes(app) {
           };
       /* eslint-enable sort-keys */
 
-      const sortAndFilterSteps = user
+      const sortAndFilterSteps = location
         ? [
             {
               $geoNear: {
@@ -107,7 +128,7 @@ async function routes(app) {
                 key: "author.location.coordinates",
                 near: {
                   $geometry: {
-                    coordinates: user.location.coordinates,
+                    coordinates: location.coordinates,
                     type: "Point",
                   },
                 },
@@ -117,8 +138,14 @@ async function routes(app) {
           ]
         : [{ $match: { $and: filters } }, { $sort: { createdAt: -1 } }];
 
-      const aggregationPipleine = [
+      const aggregationPipeline = [
         ...sortAndFilterSteps,
+        {
+          $skip: skip || 0,
+        },
+        {
+          $limit: limit || POST_PAGE_SIZE,
+        },
         {
           $lookup: {
             as: "comments",
@@ -130,18 +157,20 @@ async function routes(app) {
         {
           $project: {
             _id: true,
-            authorName: "$author.name",
-            authorType: "$author.type",
+            author: true,
             commentsCount: {
               $size: { $ifNull: ["$comments", []] },
             },
             content: contentProjection,
             distance: true,
             expireAt: true,
+            externalLinks: true,
+            language: true,
+            liked: { $in: [mongoose.Types.ObjectId(userId), "$likes"] },
             likesCount: {
               $size: { $ifNull: ["$likes", []] },
             },
-            location: "$author.location",
+            objective: true,
             title: true,
             types: true,
             visibility: true,
@@ -150,12 +179,14 @@ async function routes(app) {
       ];
 
       const [postsErr, posts] = await app.to(
-        Post.aggregate(aggregationPipleine),
+        Post.aggregate(aggregationPipeline),
       );
 
       if (postsErr) {
-        req.log.error("Failed requesting posts", { postsErr });
+        req.log.error(postsErr, "Failed requesting posts");
         throw app.httpErrors.internalServerError();
+      } else if (posts === null) {
+        return [];
       }
 
       return posts;
@@ -169,24 +200,26 @@ async function routes(app) {
       schema: createPostSchema,
     },
     async (req, reply) => {
-      const { userId } = req.body;
+      const { userId, body: postProps } = req;
       const [userErr, user] = await app.to(User.findById(userId));
       if (userErr) {
-        throw app.httpErrors.notFound();
+        req.log.error(userErr, "Failed retrieving user");
+        throw app.httpErrors.internalServerError();
+      } else if (user === null) {
+        throw app.httpErrors.forbidden();
       }
-
-      const { body: postProps } = req;
 
       // Creates embedded author document
       postProps.author = {
-        id: user.id,
+        id: mongoose.Types.ObjectId(user.id),
         location: user.location,
         name: user.name,
+        photo: user.photo,
         type: user.type,
       };
 
       // ExpireAt needs to calculate the date
-      if (postProps.expireAt in EXPIRATION_OPTIONS) {
+      if (EXPIRATION_OPTIONS.includes(postProps.expireAt)) {
         postProps.expireAt = moment().add(1, `${postProps.expireAt}s`);
       } else {
         postProps.expireAt = null;
@@ -198,7 +231,7 @@ async function routes(app) {
       const [err, post] = await app.to(new Post(postProps).save());
 
       if (err) {
-        req.log.error("Failed creating post", { err });
+        req.log.error(err, "Failed creating post");
         throw app.httpErrors.internalServerError();
       }
 
@@ -219,6 +252,9 @@ async function routes(app) {
       const { postId } = req.params;
       const [postErr, post] = await app.to(Post.findById(postId));
       if (postErr) {
+        req.log.error(postErr, "Failed retrieving post");
+        throw app.httpErrors.internalServerError();
+      } else if (post === null) {
         throw app.httpErrors.notFound();
       }
 
@@ -256,7 +292,7 @@ async function routes(app) {
         ]),
       );
       if (commentErr) {
-        req.log.error("Failed retrieving comments", { commentErr });
+        req.log.error(commentErr, "Failed retrieving comments");
         throw app.httpErrors.internalServerError();
       }
 
@@ -277,27 +313,29 @@ async function routes(app) {
       schema: deletePostSchema,
     },
     async (req) => {
-      const { userId } = req.body;
+      const { userId } = req;
       const { postId } = req.params;
       const [findErr, post] = await app.to(Post.findById(postId));
       if (findErr) {
+        req.log.error(findErr, "Failed retrieving post");
+        throw app.httpErrors.internalServerError();
+      } else if (post === null) {
         throw app.httpErrors.notFound();
-      } else if (post.author.id !== userId) {
+      } else if (!userId.equals(post.author.id)) {
         throw app.httpErrors.forbidden();
       }
 
       const [deletePostErr, deletedCount] = await app.to(post.delete());
       if (deletePostErr) {
-        req.log.error("Failed deleting post", { deletePostErr });
+        req.log.error(deletePostErr, "Failed deleting post");
         throw app.httpErrors.internalServerError();
       }
-
       const {
         deletedCommentsCount,
         ok: deleteCommentsOk,
       } = await Comment.deleteMany({ postId });
       if (deleteCommentsOk !== 1) {
-        app.log.error("failed removing comments for deleted post", { postId });
+        app.log.error(`Failed removing comments for deleted post=${postId}`);
       }
 
       return { deletedCommentsCount, deletedCount, success: true };
@@ -311,17 +349,19 @@ async function routes(app) {
       schema: updatePostSchema,
     },
     async (req) => {
-      const { userId } = req.body;
+      const { userId, body } = req;
       const [err, post] = await app.to(Post.findById(req.params.postId));
       if (err) {
+        req.log.error(err, "Failed retrieving post");
+        throw app.httpErrors.internalServerError();
+      } else if (post === null) {
         throw app.httpErrors.notFound();
-      } else if (post.author.id !== userId) {
+      } else if (!userId.equals(post.author.id)) {
         throw app.httpErrors.forbidden();
       }
-      const { body } = req;
 
       // ExpireAt needs to calculate the date
-      if (body.expireAt in EXPIRATION_OPTIONS) {
+      if (EXPIRATION_OPTIONS.includes(body.expireAt)) {
         body.expireAt = moment().add(1, `${body.expireAt}s`);
       } else {
         body.expireAt = null;
@@ -332,7 +372,7 @@ async function routes(app) {
       );
 
       if (updateErr) {
-        req.log.error("Failed updating post", { updateErr });
+        req.log.error(updateErr, "Failed updating post");
         throw app.httpErrors.internalServerError();
       }
 
@@ -347,6 +387,10 @@ async function routes(app) {
       schema: likeUnlikePostSchema,
     },
     async (req) => {
+      if (!req.userId.equals(req.params.userId)) {
+        throw app.httpErrors.forbidden();
+      }
+
       const { postId, userId } = req.params;
 
       const [updateErr, updatedPost] = await app.to(
@@ -357,6 +401,9 @@ async function routes(app) {
         ),
       );
       if (updateErr) {
+        req.log.error(updateErr, "Failed liking post");
+        throw app.httpErrors.internalServerError();
+      } else if (updatedPost === null) {
         throw app.httpErrors.notFound();
       }
 
@@ -374,6 +421,9 @@ async function routes(app) {
       schema: likeUnlikePostSchema,
     },
     async (req) => {
+      if (!req.userId.equals(req.params.userId)) {
+        throw app.httpErrors.forbidden();
+      }
       const { postId, userId } = req.params;
 
       const [updateErr, updatedPost] = await app.to(
@@ -384,6 +434,9 @@ async function routes(app) {
         ),
       );
       if (updateErr) {
+        req.log.error(updateErr, "Failed unliking post");
+        throw app.httpErrors.internalServerError()
+      } else if (updatedPost === null) {
         throw app.httpErrors.notFound();
       }
 
@@ -394,42 +447,123 @@ async function routes(app) {
     },
   );
 
-  app.post(
+  // -- Comments
+  const COMMENT_PAGE_SIZE = 5;
+
+  app.get(
     "/:postId/comments",
-    { preValidation: [app.authenticate], schema: addCommentSchema },
+    { preValidation: [app.authenticate], schema: getCommentsSchema },
     async (req) => {
-      const { body, params, userId } = req;
-      const { parentId } = body;
-      const { postId } = params;
-      if (parentId) {
-        const parentPost = await Post.findById(parentId);
-        if (!parentPost || parentPost.postId !== postId) {
-          return new httpErrors.BadRequest();
-        }
+      const { limit, skip } = req.query;
+      const { postId } = req.params;
+      const [commentErr, comments] = await app.to(
+        Comment.aggregate([
+          {
+            $match: {
+              parentId: null,
+              postId: mongoose.Types.ObjectId(postId),
+            },
+          },
+          {
+            $lookup: {
+              as: "children",
+              foreignField: "parentId",
+              from: "comments",
+              localField: "_id",
+            },
+          },
+          {
+            $addFields: {
+              childCount: {
+                $size: { $ifNull: ["$children", []] },
+              },
+            },
+          },
+          {
+            $skip: skip || 0,
+          },
+          {
+            $limit: limit || COMMENT_PAGE_SIZE,
+          },
+        ]),
+      );
+      if (commentErr) {
+        req.log.error(commentErr, "Failed retrieving comments");
+        throw app.httpErrors.internalServerError();
       }
-      return new Comment({
-        ...body,
-        authorId: userId,
-        postId,
-      }).save();
+
+      return comments;
     },
   );
 
-  app.put(
+  app.post(
+    "/:postId/comments",
+    { preValidation: [app.authenticate], schema: createCommentSchema },
+    async (req, reply) => {
+      const { userId, body: commentProps, params } = req;
+      const { postId } = params;
+
+      const [userErr, user] = await app.to(User.findById(userId));
+      if (userErr) {
+        req.log.error(userErr, "Failed retrieving user");
+        throw app.httpErrors.internalServerError();
+      } else if (user === null) {
+        throw app.httpErrors.notFound();
+      }
+
+      // Assign postId and parent comment id (if present)
+      commentProps.postId = mongoose.Types.ObjectId(postId);
+      if ("parentId" in commentProps) {
+        commentProps.parentId = mongoose.Types.ObjectId(commentProps.parentId);
+      }
+
+      // Creates embedded author document
+      commentProps.author = {
+        id: mongoose.Types.ObjectId(user.id),
+        location: user.location,
+        name: user.name,
+        photo: user.photo,
+        type: user.type,
+      };
+
+      // Initial empty likes array
+      commentProps.likes = [];
+
+      const [err, comment] = await app.to(new Comment(commentProps).save());
+
+      if (err) {
+        req.log.error(err, "Failed creating comment");
+        throw app.httpErrors.internalServerError();
+      }
+
+      reply.code(201);
+      return comment;
+    },
+  );
+
+  app.patch(
     "/:postId/comments/:commentId",
     { preValidation: [app.authenticate], schema: updateCommentSchema },
     async (req) => {
-      const { body, params, userId } = req;
-      const { comment } = body;
-      const { commentId, postId } = params;
-      const updatedComment = await Comment.findOneAndUpdate(
-        { _id: commentId, authorId: userId, postId },
-        { comment },
-        { new: true },
-      );
-      if (!updatedComment) {
-        return new httpErrors.BadRequest();
+      const { userId } = req;
+      const { content } = req.body;
+      const { commentId } = req.params;
+
+      const [err, comment] = await app.to(Comment.findById(commentId));
+      if (err) {
+        req.log.error(err, "Failed retrieving comment");
+        throw app.httpErrors.internalServerError();
+      } else if (!userId.equals(comment.author.id)) {
+        throw app.httpErrors.forbidden();
       }
+
+      comment.content = content;
+      const [updateErr, updatedComment] = await app.to(comment.save());
+      if (updateErr) {
+        req.log.error(updateErr, "Failed updating comment");
+        throw app.httpErrors.internalServerError();
+      }
+
       return updatedComment;
     },
   );
@@ -438,18 +572,35 @@ async function routes(app) {
     "/:postId/comments/:commentId",
     { preValidation: [app.authenticate], schema: deleteCommentSchema },
     async (req) => {
-      const { params, userId } = req;
-      const { commentId, postId } = params;
-      const { ok, deletedCount } = await Comment.deleteMany({
-        $or: [
-          { _id: commentId, authorId: userId, postId },
-          { parentId: commentId, postId },
-        ],
-      });
-      if (ok !== 1 || deletedCount < 1) {
-        return new httpErrors.BadRequest();
+      const { userId } = req;
+      const { commentId } = req.params;
+      const [findErr, comment] = await app.to(Comment.findById(commentId));
+      if (findErr) {
+        req.log.error(findErr, "Failed retrieving comment");
+        throw app.httpErrors.internalServerError();
+      } else if (!userId.equals(comment.author.id)) {
+        throw app.httpErrors.forbidden();
       }
-      return { deletedCount, success: true };
+
+      const [deleteCommentErr, deletedComment] = await app.to(comment.delete());
+      if (deleteCommentErr) {
+        req.log.error(deleteCommentErr, "Failed deleting comment");
+        throw app.httpErrors.internalServerError();
+      }
+
+      const {
+        deletedCount: deletedNestedCount,
+        ok: deleteNestedOk,
+      } = await Comment.deleteMany({ parentId: commentId });
+      if (deleteNestedOk !== 1) {
+        app.log.error(`Failed removing nested comments for deleted comment=${commentId}`);
+      }
+
+      return {
+        deletedComment,
+        deletedCount: deletedNestedCount + 1,
+        success: true,
+      };
     },
   );
 
@@ -457,22 +608,27 @@ async function routes(app) {
     "/:postId/comments/:commentId/likes/:userId",
     { preValidation: [app.authenticate], schema: likeUnlikeCommentSchema },
     async (req) => {
-      const { commentId, postId, userId } = req.params;
-      if (userId !== req.userId) {
-        return new httpErrors.Forbidden();
+      if (!req.userId.equals(req.params.userId)) {
+        throw app.httpErrors.forbidden();
       }
-      const updatedComment = await Comment.findOneAndUpdate(
-        { _id: commentId, likes: { $ne: userId }, postId },
-        { $inc: { likesCount: 1 }, $push: { likes: userId } },
-        { new: true },
+      const { userId } = req;
+      const { commentId } = req.params;
+
+      const [updateErr, updatedComment] = await app.to(
+        Comment.findOneAndUpdate(
+          { _id: commentId },
+          { $addToSet: { likes: userId } },
+          { new: true },
+        ),
       );
-      if (!updatedComment) {
-        return new httpErrors.BadRequest();
+      if (updateErr) {
+        req.log.error(updateErr, "Failed liking comment");
+        throw app.httpErrors.internalServerError();
       }
 
       return {
         likes: updatedComment.likes,
-        likesCount: updatedComment.likesCount,
+        likesCount: updatedComment.likes.length,
       };
     },
   );
@@ -481,22 +637,27 @@ async function routes(app) {
     "/:postId/comments/:commentId/likes/:userId",
     { preValidation: [app.authenticate], schema: likeUnlikeCommentSchema },
     async (req) => {
-      const {
-        params: { commentId, postId },
-        userId,
-      } = req;
-      const updatedComment = await Comment.findOneAndUpdate(
-        { _id: commentId, likes: userId, postId },
-        { $inc: { likesCount: -1 }, $pull: { likes: userId } },
-        { new: true },
+      if (!req.userId.equals(req.params.userId)) {
+        throw app.httpErrors.forbidden();
+      }
+      const { userId } = req;
+      const { commentId } = req.params;
+
+      const [updateErr, updatedComment] = await app.to(
+        Comment.findOneAndUpdate(
+          { _id: commentId },
+          { $pull: { likes: userId } },
+          { new: true },
+        ),
       );
-      if (!updatedComment) {
-        return new httpErrors.BadRequest();
+      if (updateErr) {
+        req.log.error(updateErr, "Failed unliking comment");
+        throw app.httpErrors.internalServerError();
       }
 
       return {
         likes: updatedComment.likes,
-        likesCount: updatedComment.likesCount,
+        likesCount: updatedComment.likes.length,
       };
     },
   );

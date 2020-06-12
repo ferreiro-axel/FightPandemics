@@ -2,6 +2,19 @@
 const { Schema, model, ObjectId } = require("mongoose");
 const { schema: locationSchema } = require("./Location");
 
+const USER_TYPES = [
+  "Company",
+  "Community",
+  "Government",
+  "Health care provider",
+  "Individual",
+  "Non-profit",
+  "Other",
+  "R&D",
+  "Startup",
+  "University",
+];
+
 // -- Schema
 const authorSchema = new Schema({
   id: {
@@ -14,19 +27,9 @@ const authorSchema = new Schema({
     required: true,
     type: String,
   },
+  photo: String,
   type: {
-    enum: [
-      "Company",
-      "Community",
-      "Government",
-      "Health care provider",
-      "Individual",
-      "Non-profit",
-      "Other",
-      "R&D",
-      "Startup",
-      "University",
-    ],
+    enum: USER_TYPES,
     required: true,
     trim: true,
     type: String,
@@ -36,5 +39,8 @@ const authorSchema = new Schema({
 // -- Model
 const Author = model("Author", authorSchema);
 
-exports.schema = authorSchema;
-exports.model = Author;
+module.exports = {
+  USER_TYPES,
+  model: Author,
+  schema: authorSchema,
+};

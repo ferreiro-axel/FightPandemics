@@ -1,15 +1,22 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import InputError from "components/Input/InputError";
 import { withRouter, Link } from "react-router-dom";
 import { asyncGetGeoLocation } from "utils/geolocation";
+import { validateEmail } from "utils/validators";
+import WizardSubmit from "components/StepWizard/WizardSubmit"
 import {
   StyledWizard,
   WizardContainer,
   WizardStep,
   WizardNav,
   WizardButtonGroup,
+  ShowAnywhere,
+  ShareLocation,
   StepTitle,
+  StepSubtitle,
   SkipLink,
   StyledTextInput,
+  StyledSearchInput,
   WizardProgress,
   WizardFormWrapper,
   WizardFormGroup,
@@ -18,7 +25,6 @@ import {
   WizardCheckboxWrapper,
   WizardCheckboxItem,
 } from "components/StepWizard";
-import { IconButton, SubmitButton } from "../components/Button";
 
 // ICONS
 import SvgIcon from "components/Icon/SvgIcon";
@@ -28,10 +34,11 @@ const INITIAL_STATE = {
   answers: [],
 };
 
+
 const STEP_1_ANSWERS = [
   "As a Volunteer",
   "As a Donor/Investor",
-  "As a Organization",
+  "As an Organisation",
 ];
 const STEP_1_STATE = {
   answers: getAnswersMap(STEP_1_ANSWERS),
@@ -62,9 +69,8 @@ const Step1 = (props) => {
               key={i}
               onChange={() => toggleAnswer(answer)}
               checked={!none && checked}
-            >
-              {answer}
-            </WizardCheckboxItem>
+              text={answer}
+            />
           ))}
         </WizardCheckboxWrapper>
       </WizardFormWrapper>
@@ -97,71 +103,88 @@ const Step2 = (props) => {
         Question {props.currentStep}/{props.totalSteps}
       </WizardProgress>
       <StepTitle>Where are you located?</StepTitle>
-      <p>We want to show you the most relevant results</p>
+      <StepSubtitle>We want to show you the most relevant results</StepSubtitle>
       <WizardFormWrapper>
         <WizardFormGroup>
-          <StyledTextInput
+          <StyledSearchInput
             type="text"
             name="manualLocation"
             label="Location search"
-            placeholder="Enter Address, Zip Code or City"
+            placeholder="Enter Address, Zip Code, or City"
             onChange={manualLocation}
             value={locationSearch}
           />
         </WizardFormGroup>
-        <IconButton
+        <ShareLocation
           tertiary="true"
-          icon={<SvgIcon src={shareMyLocation} />}
+          icon={<SvgIcon className="share-location-icon" src={shareMyLocation} />}
           onSelect={selectLocationDetection}
         >
           Share my location
-        </IconButton>
-        <SkipLink>
-          <SubmitButton tertiary="true" onSelect={rejectLocationDetection}>
+        </ShareLocation>
+        <Link to="/feed">
+          <ShowAnywhere tertiary="true" onSelect={rejectLocationDetection}>
             Show me postings from anywhere
-          </SubmitButton>
-        </SkipLink>
+          </ShowAnywhere>
+        </Link>
       </WizardFormWrapper>
     </WizardStep>
   );
 };
-
 const Step3 = (props) => {
   const [email, setEmail] = useState("");
-  const onChange = (evt) => {
-    setEmail(evt);
+  const [valid, setValid] = useState(true);
+
+  useEffect(() => {
+    const validated = !email || validateEmail(email);
+    setValid(validated);
+  }, [email]);
+
+  const onChange = (event) => {
+    setEmail(event.target.value);
   };
+
   const onSubmit = () => {
-    props.update("email", email);
+    console.log("submit");
   };
+
   return (
     <WizardStep className="wizard-step">
       <WizardProgress className="text-primary">
         Question {props.currentStep}/{props.totalSteps}
       </WizardProgress>
       <StepTitle>What is your email address?</StepTitle>
+      <StepSubtitle>
+        We respect your privacy. Please read our{" "}
+        <Link to={"/terms-conditions"}>Terms and Conditions</Link>.
+      </StepSubtitle>
       <WizardFormWrapper>
         <WizardFormGroup controlId="userEmailGroup">
           <StyledTextInput
             type="email"
-            name="userEmail"
+            name="email"
             label="Email"
-            placeholder="Type your email"
+            className={!valid && "has-error"}
+            placeholder="Enter your email address..."
             onChange={onChange}
-            value={email && email}
+            value={email}
+            required
           />
+          {!valid && <InputError>Email is invalid</InputError>}
         </WizardFormGroup>
-        <WizardButtonGroup>
-          <SubmitButton primary="true" onClick={onSubmit}>
-            Submit
-          </SubmitButton>
-          <SkipLink>
-            <Link to="/AirTableCOVID">
-              {/* By clicking on “skip”, users can skip the landing questions to see the information directly */}
-              Skip
+        <WizardSubmit
+          disabled={!valid}
+          primary="true"
+          onClick={onSubmit}>
+          Submit
+          </WizardSubmit>
+        <SkipLink>
+          <Link to="/feed">
+            {/* By clicking on “skip”, users can skip the landing questions to see the information directly */}
+            Skip
             </Link>
-          </SkipLink>
-        </WizardButtonGroup>
+        </SkipLink>
+
       </WizardFormWrapper>
     </WizardStep>
   );

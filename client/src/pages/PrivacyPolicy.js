@@ -23,7 +23,7 @@ const PrivacyPolicy = () => {
       <TextContainer>
         <h2 className="text-primary display-6">Privacy Policy</h2>
         <Paragraph>
-          <strong>Fightpandemics, INC.</strong> (the <strong>“Company”</strong>,{" "}
+          <strong>FightPandemics, INC.</strong> (the <strong>“Company”</strong>,{" "}
           <strong>“We”</strong> or/and <strong>“Us”</strong>) is the manager of
           this website and hereby informs YOU how We will collect and process
           your Personal Data (as defined below) when YOU use our services,
@@ -397,12 +397,12 @@ const PrivacyPolicy = () => {
               parties under the following circumstances:
               <ListNoIndent type="a">
                 <li>
-                  <u>Service providers and business partners:</u> We will allow
-                  our service providers and business partners that perform
-                  amongst others, to process maintenance and other IT services,
-                  marketing and communication, accounting, finance, legal and
-                  audit and other business operations for Us to access to your
-                  personal data and other business operations.
+                  <u>Service providers and business partners:</u> We could share
+                  anonymized data to our service providers and business partners
+                  that perform amongst others, to process maintenance and other
+                  IT services, marketing and communication, accounting, finance,
+                  legal and audit and other business operations for Us, and in
+                  order to be able to provide our service.
                 </li>
                 <li>
                   <u>

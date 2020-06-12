@@ -2,6 +2,9 @@ import Home from "./pages/Home";
 import NeedHelp from "./pages/NeedHelp";
 import OfferHelp from "./pages/OfferHelp";
 import About from "./pages/About";
+import CreateOrganizationProfile from "./pages/CreateOrganizationProfile";
+import EditOrganizationProfile from "./pages/EditOrganizationProfile";
+import EditOrganizationAccount from "./pages/EditOrganizationAccount";
 import Medical from "./pages/Medical";
 import SymptomsCheck from "./pages/SymptomsCheck";
 import TermsConditions from "./pages/TermsConditions";
@@ -15,7 +18,10 @@ import Login from "./pages/Login";
 import VerifyEmail from "./pages/VerifyEmail";
 import NearestHospital from "./pages/NearestHospital";
 import CreatePost from "./pages/CreatePost";
+import ProfileCompleted from "./pages/ProfileCompleted";
 import CreateUserProfile from "./pages/CreateUserProfile";
+import Logout from "./pages/Logout";
+import Faq from "./pages/Faq";
 
 const routes = [
   {
@@ -42,6 +48,10 @@ const routes = [
     },
   },
   {
+    path: "/auth/logout",
+    component: Logout,
+  },
+  {
     path: "/auth/verify-email",
     component: VerifyEmail,
     layout: "logo",
@@ -60,6 +70,18 @@ const routes = [
   {
     path: "/about",
     component: About,
+  },
+  {
+    path: "/CreateOrganizationProfile",
+    component: CreateOrganizationProfile,
+  },
+  {
+    path: "/edit-organization-account",
+    component: EditOrganizationAccount,
+  },
+  {
+    path: "/edit-organization-profile",
+    component: EditOrganizationProfile,
   },
   {
     path: "/medical",
@@ -87,6 +109,15 @@ const routes = [
   },
   {
     path: "/feed",
+    exact: true,
+    component: Feed,
+    props: {
+      mobiletabs: true,
+      tabIndex: 2,
+    },
+  },
+  {
+    path: "/feed/:id",
     component: Feed,
     props: {
       mobiletabs: true,
@@ -96,6 +127,17 @@ const routes = [
   {
     path: "/profile",
     component: Profile,
+    props: {
+      loggedInOnly: true,
+    },
+  },
+  // todo: maybe move this inside the create-user-profile since it doesn't really need a separate route for a "page"
+  {
+    path: "/profile-completed",
+    component: ProfileCompleted,
+    props: {
+      loggedInOnly: true,
+    },
   },
   {
     path: "/edit-profile",
@@ -125,6 +167,10 @@ const routes = [
   {
     path: "/cookies-policy",
     component: CookiesPolicy,
+  },
+  {
+    path: "/faq",
+    component: Faq,
   },
 ];
 

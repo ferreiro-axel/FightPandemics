@@ -1,29 +1,18 @@
 const S = require("fluent-schema");
 const { strictSchema } = require("./utils");
 
-const { schema: authorSchema } = require("../../models/Author");
-const { schema: postSchema } = require("../../models/Post");
-
-const EXPIRATION_OPTIONS = ["day", "week", "month", "forever"];
-const POST_OBJECTIVES = postSchema.tree.objective.enum;
-const POST_TYPES = postSchema.tree.types.enum;
-const USER_TYPES = authorSchema.tree.type.enum;
-const VISIBILITY_OPTIONS = postSchema.tree.visibility.enum;
+const {
+  EXPIRATION_OPTIONS,
+  POST_OBJECTIVES,
+  POST_TYPES,
+  VISIBILITY_OPTIONS,
+} = require("../../models/Post");
 
 const getPostsSchema = {
   querystring: strictSchema()
-    .prop(
-      "filter",
-      strictSchema()
-        .prop(
-          "author.location.coordinates",
-          S.array().items(S.number()).minItems(2).maxItems(2),
-        )
-        .prop("author.type", S.string().enum(USER_TYPES))
-        .prop("types", S.array().items(S.string().enum(POST_TYPES)))
-        .prop("objective", S.string().enum(POST_OBJECTIVES)),
-    )
+    .prop("filter", S.string()) // URI encoded JSON; TODO: figure out way to custom validation
     .prop("limit", S.integer())
+    .prop("objective", S.string().enum(POST_OBJECTIVES))
     .prop("skip", S.integer()),
 };
 
@@ -46,15 +35,11 @@ const createPostSchema = {
       "types",
       S.array().minItems(1).items(S.string().enum(POST_TYPES)).required(),
     )
-    .prop("userId", S.string())
     .prop("visibility", S.string().enum(VISIBILITY_OPTIONS).required()),
 };
 
 const getPostByIdSchema = {
-  querystring: S.object()
-    .prop("skip", S.integer())
-    .prop("limit", S.integer())
-    .prop("userId", S.string().required()),
+  querystring: S.object().prop("skip", S.integer()).prop("limit", S.integer()),
 };
 
 const updatePostSchema = {
@@ -73,7 +58,6 @@ const updatePostSchema = {
     .prop("objective", S.string().enum(POST_OBJECTIVES))
     .prop("title", S.string())
     .prop("types", S.array().minItems(1).items(S.string().enum(POST_TYPES)))
-    .prop("userId", S.string().required())
     .prop("visibility", S.string().enum(VISIBILITY_OPTIONS)),
   params: S.object().prop("postId", S.string()),
 };
@@ -95,9 +79,18 @@ const deletePostSchema = {
   params: strictSchema().prop("postId", S.string().required()),
 };
 
-const addCommentSchema = {
-  body: strictSchema().prop("comment", S.string().required()),
+const createCommentSchema = {
+  body: strictSchema()
+    .prop("content", S.string().required())
+    .prop("parentId", S.string()),
   params: strictSchema().prop("postId", S.string().required()),
+};
+
+const getCommentsSchema = {
+  params: strictSchema().prop("postId", S.string().required()),
+  queryString: strictSchema()
+    .prop("limit", S.integer())
+    .prop("skip", S.integer()),
 };
 
 const deleteCommentSchema = {
@@ -107,17 +100,18 @@ const deleteCommentSchema = {
 };
 
 const updateCommentSchema = {
-  body: strictSchema().prop("comment", S.string().required()),
+  body: strictSchema().prop("content", S.string().required()),
   params: strictSchema()
     .prop("commentId", S.string().required())
     .prop("postId", S.string().required()),
 };
 
 module.exports = {
-  addCommentSchema,
+  createCommentSchema,
   createPostSchema,
   deleteCommentSchema,
   deletePostSchema,
+  getCommentsSchema,
   getPostByIdSchema,
   getPostsSchema,
   likeUnlikeCommentSchema,

@@ -1,22 +1,20 @@
 import styled from "styled-components";
-import { mq } from "constants/theme";
+import { theme, mq } from "constants/theme";
+const { offWhite } = theme.colors;
 
 const Main = styled.main`
-  margin-left: 2rem;
-  margin-right: 2rem;
+  padding: 0 2rem;
 
-  min-height: calc(100vh-124px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-  @media screen and (min-width: ${mq.tablet.wide.minWidth}) {
-    min-height: calc(100vh-166px);
-  }
+  min-height: calc(100% - 119px);
 
-  @media screen and (min-width: ${mq.desktop.small.minWidth}) {
-    min-height: calc(100vh-166px);
-  }
+  @media screen and (min-width: ${mq.tablet.narrow.minWidth}) {
+    background-color: ${offWhite};
 
-  @media screen and (min-width: ${mq.desktop.medium.minWidth}) {
-    min-height: calc(100vh-166px);
+    min-height: calc(100% - 160px);
   }
 `;
 
